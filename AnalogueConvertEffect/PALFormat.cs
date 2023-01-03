@@ -1,9 +1,4 @@
-﻿using PaintDotNet;
-using PaintDotNet.Effects;
-using PaintDotNet.IndirectUI;
-using PaintDotNet.PropertySystem;
-using System;
-using System.Drawing;
+﻿using System;
 using System.Numerics;
 
 /* Implementation of the PAL format
@@ -55,7 +50,7 @@ namespace AnalogueConvertEffect
                                   true) //Interlaced?
         { }
 
-        public override Surface Decode(double[] signal, int activeWidth, double crosstalk = 0.0, double resonance = 1.0, double scanlineJitter = 0.0, int channelFlags = 0x7)
+        public override ImageData Decode(double[] signal, int activeWidth, double crosstalk = 0.0, double resonance = 1.0, double scanlineJitter = 0.0, int channelFlags = 0x7)
         {
             int[] activeSignalStarts = new int[videoScanlines]; //Start points of the active parts
             byte R = 0;
@@ -91,7 +86,10 @@ namespace AnalogueConvertEffect
                 VSignal[i] = 2.0 * USignalIFT[finalSignal.Length - 1 - i].Real;
             }
 
-            Surface writeToSurface = new Surface(activeWidth, videoScanlines);
+            ImageData writeToSurface = new ImageData();
+            writeToSurface.Width = activeWidth;
+            writeToSurface.Height = videoScanlines;
+            writeToSurface.Data = new byte[activeWidth * videoScanlines * 4];
 
             for (int i = 0; i < videoScanlines; i++) //Where the active signal starts
             {
@@ -114,7 +112,7 @@ namespace AnalogueConvertEffect
                 }
             }
 
-            MemoryBlock surfaceColours = writeToSurface.Scan0;
+            byte[] surfaceColours = writeToSurface.Data;
             int currentScanline;
             Random rng = new Random();
             int curjit = 0;
@@ -146,7 +144,7 @@ namespace AnalogueConvertEffect
             return writeToSurface;
         }
 
-        public override double[] Encode(Surface surface)
+        public override double[] Encode(ImageData surface)
         {
             int signalLen = (int)(surface.Width * videoScanlines * (scanlineTime / realActiveTime)); //To get a good analogue feel, we must limit the vertical resolution; the horizontal resolution will be limited as we decode the distorted signal.
             int[] boundaryPoints = new int[videoScanlines + 1]; //Boundaries of the scanline signals
@@ -164,9 +162,6 @@ namespace AnalogueConvertEffect
             int remainingSync = 0;
             double sampleTime = realActiveTime / (double)surface.Width;
 
-            Surface wrkSrf = new Surface(surface.Width, videoScanlines);
-            wrkSrf.FitSurface(ResamplingAlgorithm.SuperSampling, surface);
-
             boundaryPoints[0] = 0; //Beginning of the signal
             boundaryPoints[videoScanlines] = signalLen; //End of the signal
             for(int i = 1; i < videoScanlines; i++) //Rest of the signal
@@ -181,7 +176,7 @@ namespace AnalogueConvertEffect
                 activeSignalStarts[i] = (int)((((double)i * (double)signalLen)/(double)videoScanlines) + ((scanlineTime - realActiveTime)/(2*realActiveTime))*surface.Width) - boundaryPoints[i];
             }
 
-            MemoryBlock surfaceColours = wrkSrf.Scan0;
+            byte[] surfaceColours = surface.Data;
             int currentScanline;
             for (int i = 0; i < videoScanlines; i++)
             {

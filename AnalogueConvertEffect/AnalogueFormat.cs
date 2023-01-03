@@ -1,9 +1,4 @@
-﻿using PaintDotNet;
-using PaintDotNet.Effects;
-using PaintDotNet.IndirectUI;
-using PaintDotNet.PropertySystem;
-using System;
-using System.Drawing;
+﻿using System;
 
 /*
  * Abstract base class of all analogue formats
@@ -33,6 +28,13 @@ using System.Drawing;
 
 namespace AnalogueConvertEffect
 {
+    public struct ImageData
+    {
+        public byte[] Data;
+        public int Width;
+        public int Height;
+    }
+
     //Base class for all analogue formats
     public abstract class AnalogueFormat
     {
@@ -63,6 +65,7 @@ namespace AnalogueConvertEffect
         protected int[] boundPoints;
 
         public int Scanlines { get { return scanlines; } }
+        public int VideoScanlines { get { return videoScanlines; } }
         public double Framerate { get { return isInterlaced ? framerate/2f : framerate; } }
         public double SubcarrierFrequency { get { return chromaCarrierFrequency; } }
         public int[] BoundaryPoints { get { return boundPoints; } }
@@ -129,7 +132,7 @@ namespace AnalogueConvertEffect
             realActiveTime = activeTime / (isInterlaced ? 1.0 : 2.0);
         }
 
-        public abstract double[] Encode(Surface surface);
-        public abstract Surface Decode(double[] signal, int activeWidth, double crosstalk, double resonance, double scanlineJitter, int channelFlags); //Decode must respect the original bandwidths, otherwise we don't get that analogue feeling
+        public abstract double[] Encode(ImageData surface);
+        public abstract ImageData Decode(double[] signal, int activeWidth, double crosstalk, double resonance, double scanlineJitter, int channelFlags); //Decode must respect the original bandwidths, otherwise we don't get that analogue feeling
     }
 }
