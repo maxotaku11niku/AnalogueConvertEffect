@@ -41,8 +41,8 @@ namespace AnalogueConvertEffect
         public string? DisplayName => "Analogue Convert";
         public string? Author => "Maxim Hoxha";
         public string? Copyright => "2022 Maxim Hoxha";
-        public Version? Version => new Version("0.9");
-        public Uri? WebsiteUri => new Uri("https://maxotaku11niku.github.io/");
+        public Version? Version => new Version("0.9.1");
+        public Uri? WebsiteUri => new Uri("https://maxotaku11niku.github.io/AnalogueConvertEffect");
     }
 
     [PluginSupportInfo(typeof(PluginSupportInfo))]
