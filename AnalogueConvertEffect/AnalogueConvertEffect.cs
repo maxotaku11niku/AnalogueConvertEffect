@@ -4,6 +4,8 @@ using PaintDotNet;
 using PaintDotNet.Effects;
 using PaintDotNet.IndirectUI;
 using PaintDotNet.PropertySystem;
+using PaintDotNet.Imaging;
+using PaintDotNet.Rendering;
 
 /*
  * Analogue Convert Effect for Paint.NET
@@ -41,7 +43,7 @@ namespace AnalogueConvertEffect
         public string? DisplayName => "Analogue Convert";
         public string? Author => "Maxim Hoxha";
         public string? Copyright => "2022 Maxim Hoxha";
-        public Version? Version => new Version("0.9.1");
+        public Version? Version => new Version("0.9.2");
         public Uri? WebsiteUri => new Uri("https://maxotaku11niku.github.io/AnalogueConvertEffect");
     }
 
@@ -73,8 +75,9 @@ namespace AnalogueConvertEffect
         bool doY;
         bool doU;
         bool doV;
+        static IBitmapSource nullsource = null;
 
-        public AnalogueConvertEffect() : base("Analogue Convert", null, SubmenuNames.Stylize, new EffectOptions() { Flags = EffectFlags.Configurable | EffectFlags.ForceAliasedSelectionQuality , RenderingSchedule = EffectRenderingSchedule.None })
+        public AnalogueConvertEffect() : base("Analogue Convert", nullsource, SubmenuNames.Stylize, new EffectOptions() { Flags = EffectFlags.Configurable | EffectFlags.ForceAliasedSelectionQuality, RenderingSchedule = EffectRenderingSchedule.None })
         {
         }
 
@@ -205,7 +208,7 @@ namespace AnalogueConvertEffect
             }
             format.SetInterlace(interlace);
             Rectangle surrRect = rois[0];
-            for(int i = 1; i < rois.Length; i++) //Determine bounding rectangle
+            for (int i = 1; i < rois.Length; i++) //Determine bounding rectangle
             {
                 if (rois[i].Left < surrRect.Left)
                 {
@@ -222,7 +225,7 @@ namespace AnalogueConvertEffect
                     surrRect.Width = rois[i].Right - surrRect.X;
                 }
 
-                if (rois[i].Bottom < surrRect.Bottom)
+                if (rois[i].Bottom > surrRect.Bottom)
                 {
                     surrRect.Height = rois[i].Bottom - surrRect.Y;
                 }
@@ -230,27 +233,27 @@ namespace AnalogueConvertEffect
             Surface inSrf = new Surface(surrRect.Size);
             inSrf.CopySurface(SrcArgs.Surface, surrRect);
             Surface wrkSrf = new Surface(wrkWidth, format.VideoScanlines);
-            wrkSrf.FitSurface(ResamplingAlgorithm.SuperSampling, inSrf);
+            wrkSrf.FitSurface(ResamplingAlgorithm.AdaptiveBestQuality, inSrf);
             ImageData inIDat = new ImageData();
             inIDat.Width = wrkWidth;
             inIDat.Height = format.VideoScanlines;
             inIDat.Data = new byte[wrkWidth * format.VideoScanlines * 4];
             MemoryBlock wrkblk = wrkSrf.Scan0;
-            for(int i = 0; i < inIDat.Data.Length; i++)
+            for (int i = 0; i < inIDat.Data.Length; i++)
             {
                 inIDat.Data[i] = wrkblk[i];
             }
             double[] signal = format.Encode(inIDat);
-            DistortSignal(signal, signal.Length*format.Framerate, format.SubcarrierFrequency, format.BoundaryPoints);
+            DistortSignal(signal, signal.Length * format.Framerate, format.SubcarrierFrequency, format.BoundaryPoints);
             ImageData outIDat = format.Decode(signal, wrkWidth, crosstalk, resonance, jitter, (doY ? 0x1 : 0x0) | (doU ? 0x2 : 0x0) | (doV ? 0x4 : 0x0));
             Surface destSurf = new Surface(surrRect.Size);
             for (int i = 0; i < inIDat.Data.Length; i++)
             {
                 wrkblk[i] = outIDat.Data[i];
             }
-            destSurf.FitSurface(ResamplingAlgorithm.Bilinear, wrkSrf);
+            destSurf.FitSurface(ResamplingAlgorithm.AdaptiveBestQuality, wrkSrf);
             if (length <= 0) return;
-            for(int i = startIndex; i < startIndex + length; i++)
+            for (int i = startIndex; i < startIndex + length; i++)
             {
                 Render(destSurf, DstArgs.Surface, rois[i], surrRect.Location);
             }
