@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Drawing;
 using System.Numerics;
 
 /* Implementation of the NTSC format
@@ -71,6 +72,7 @@ namespace AnalogueConvertEffect
             bool inclQ = ((channelFlags & 0x2) == 0) ? false : true;
             bool inclI = ((channelFlags & 0x4) == 0) ? false : true;
 
+            /*/ //FFT based
             Complex[] signalFT = MathsUtil.FourierTransform(signal, 1);
             signalFT = MathsUtil.BandPassFilter(signalFT, sampleRate, (mainBandwidth - sideBandwidth) / 2.0, mainBandwidth + sideBandwidth, resonance); //Restrict bandwidth to the actual broadcast bandwidth
             Complex[] QcolourSignalFT = MathsUtil.BandPassFilter(signalFT, sampleRate, chromaCarrierFrequency, 2 * chromaBandwidthUpper, resonance, blendStr); //Extract colour information
@@ -90,6 +92,43 @@ namespace AnalogueConvertEffect
                 QSignal[i] = 2.0 * (-c * (QSignalIFT[finalSignal.Length - 1 - i].Imaginary) + s * (QSignalIFT[finalSignal.Length - 1 - i].Real));
                 ISignal[i] = 2.0 * (c * (ISignalIFT[finalSignal.Length - 1 - i].Real) + s * (ISignalIFT[finalSignal.Length - 1 - i].Imaginary));
             }
+            //*/
+
+            /**/ //FIR based
+            double sampleTime = realActiveTime / (double)activeWidth;
+            double[] mainfir = MathsUtil.MakeFIRFilter(sampleRate, 16, (mainBandwidth - sideBandwidth) / 2.0, mainBandwidth + sideBandwidth, resonance);
+            double[] qfir = MathsUtil.MakeFIRFilter(sampleRate, 32, 0.0, 2.0 * chromaBandwidthUpper, resonance); //Q has less resolution than I
+            double[] ifir = MathsUtil.MakeFIRFilter(sampleRate, 32, (chromaBandwidthUpper - chromaBandwidthLower) / 2.0, chromaBandwidthLower + chromaBandwidthUpper, resonance);
+            for (int i = 1; i < qfir.Length; i++)
+            {
+                qfir[i] *= 2.0;
+            }
+            for (int i = 1; i < ifir.Length; i++)
+            {
+                ifir[i] *= 2.0;
+            }
+            double[] notchfir = new double[qfir.Length];
+            notchfir[0] = 1.0 - qfir[0];
+            for (int i = 1; i < notchfir.Length; i++)
+            {
+                notchfir[i] = -qfir[i];
+            }
+            signal = MathsUtil.FIRFilter(signal, mainfir);
+            double[] QSignal = MathsUtil.FIRFilterCrosstalkShift(signal, qfir, crosstalk, sampleTime, carrierAngFreq);
+            double[] ISignal = MathsUtil.FIRFilterCrosstalkShift(signal, ifir, crosstalk, sampleTime, carrierAngFreq);
+
+            double time = 0.0;
+            for (int i = 0; i < signal.Length; i++)
+            {
+                time = i * sampleTime;
+                QSignal[i] = QSignal[i] * Math.Sin(carrierAngFreq * time - 0.25 * Math.PI + chromaPhase);
+                ISignal[i] = ISignal[i] * Math.Cos(carrierAngFreq * time - 0.25 * Math.PI + chromaPhase);
+            }
+
+            signal = MathsUtil.FIRFilterCrosstalkShift(signal, notchfir, crosstalk, sampleTime, carrierAngFreq);
+            QSignal = MathsUtil.FIRFilter(QSignal, qfir);
+            ISignal = MathsUtil.FIRFilter(ISignal, ifir);
+            //*/
 
             ImageData writeToSurface = new ImageData();
             writeToSurface.Width = activeWidth;

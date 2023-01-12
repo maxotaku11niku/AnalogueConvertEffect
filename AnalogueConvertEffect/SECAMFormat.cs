@@ -1,4 +1,5 @@
-﻿using System;
+﻿using PaintDotNet.DirectWrite;
+using System;
 using System.Numerics;
 
 /* Implementation of the SECAM format (currently incomplete)
@@ -89,6 +90,7 @@ namespace AnalogueConvertEffect
                 activeSignalStarts[i] = (int)((((double)i * (double)signal.Length) / (double)videoScanlines) + ((scanlineTime - realActiveTime) / (2 * realActiveTime)) * activeWidth);
             }
 
+            /**/ //FFT based
             Complex[] signalFT = MathsUtil.FourierTransform(signal, 1);
             double specRate = (2.0 * Math.PI * sampleRate) / signalFT.Length;
             signalFT = MathsUtil.BandPassFilter(signalFT, sampleRate, (mainBandwidth - sideBandwidth) / 2.0, mainBandwidth + sideBandwidth, resonance); //Restrict bandwidth to the actual broadcast bandwidth
@@ -128,6 +130,32 @@ namespace AnalogueConvertEffect
                 DbSignal[i] = 400.0 * (DbSignalFinal[finalSignal.Length - 1 - i].Imaginary);
                 DrSignal[i] = 400.0 * (DrSignalFinal[finalSignal.Length - 1 - i].Imaginary);
             }
+            //*/
+
+            /*/ //FIR based
+            double sampleTime = realActiveTime / (double)activeWidth;
+            double[] mainfir = MathsUtil.MakeFIRFilter(sampleRate, 16, (mainBandwidth - sideBandwidth) / 2.0, mainBandwidth + sideBandwidth, resonance);
+            double[] dbfir = MathsUtil.MakeFIRFilter(sampleRate, 32, (SubCarrierUpperFrequencies[0] - SubCarrierLowerFrequencies[0]) / 2.0, SubCarrierLowerFrequencies[0] + SubCarrierUpperFrequencies[0], resonance);
+            double[] drfir = MathsUtil.MakeFIRFilter(sampleRate, 32, (SubCarrierUpperFrequencies[1] - SubCarrierLowerFrequencies[1]) / 2.0, SubCarrierLowerFrequencies[1] + SubCarrierUpperFrequencies[1], resonance);
+            double[] colfir = MathsUtil.MakeFIRFilter(sampleRate, 32, (chromaBandwidthUpper - chromaBandwidthLower) / 2.0, chromaBandwidthLower + chromaBandwidthUpper, resonance);
+            for (int i = 1; i < colfir.Length; i++)
+            {
+                colfir[i] *= 2.0;
+            }
+            double[] notchfir = new double[colfir.Length];
+            notchfir[0] = 1.0 - colfir[0];
+            for (int i = 1; i < notchfir.Length; i++)
+            {
+                notchfir[i] = -colfir[i];
+            }
+            signal = MathsUtil.FIRFilter(signal, mainfir);
+            double[] DbSignal = MathsUtil.FIRFilterCrosstalkShift(signal, dbfir, crosstalk, sampleTime, SubCarrierAngFrequencies[0]);
+            double[] DrSignal = MathsUtil.FIRFilterCrosstalkShift(signal, drfir, crosstalk, sampleTime, SubCarrierAngFrequencies[1]);
+
+            signal = MathsUtil.FIRFilterCrosstalkShift(signal, notchfir, crosstalk, sampleTime, carrierAngFreq);
+            DbSignal = MathsUtil.FIRFilter(DbSignal, dbfir);
+            DrSignal = MathsUtil.FIRFilter(DrSignal, drfir);
+            //*/
 
             ImageData writeToSurface = new ImageData();
             writeToSurface.Width = activeWidth;

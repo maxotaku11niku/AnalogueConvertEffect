@@ -1,4 +1,5 @@
-﻿using System;
+﻿using PaintDotNet;
+using System;
 using System.Numerics;
 
 /* Implementation of the PAL format
@@ -69,6 +70,7 @@ namespace AnalogueConvertEffect
             bool inclU = ((channelFlags & 0x2) == 0) ? false : true;
             bool inclV = ((channelFlags & 0x4) == 0) ? false : true;
 
+            /*/ //FFT based
             Complex[] signalFT = MathsUtil.FourierTransform(signal, 1);
             signalFT = MathsUtil.BandPassFilter(signalFT, sampleRate, (mainBandwidth - sideBandwidth) / 2.0, mainBandwidth + sideBandwidth, resonance); //Restrict bandwidth to the actual broadcast bandwidth
             Complex[] colourSignalFT = MathsUtil.BandPassFilter(signalFT, sampleRate, ((chromaBandwidthUpper - chromaBandwidthLower) / 2.0) + chromaCarrierFrequency, chromaBandwidthLower + chromaBandwidthUpper, resonance, blendStr); //Extract colour information
@@ -85,6 +87,39 @@ namespace AnalogueConvertEffect
                 USignal[i] = -2.0 * USignalIFT[finalSignal.Length - 1 - i].Imaginary;
                 VSignal[i] = 2.0 * USignalIFT[finalSignal.Length - 1 - i].Real;
             }
+            //*/
+
+            /**/ //FIR based
+            double sampleTime = realActiveTime / (double)activeWidth;
+            double[] mainfir = MathsUtil.MakeFIRFilter(sampleRate, 16, (mainBandwidth - sideBandwidth) / 2.0, mainBandwidth + sideBandwidth, resonance);
+            double[] colfir = MathsUtil.MakeFIRFilter(sampleRate, 32, (chromaBandwidthUpper - chromaBandwidthLower) / 2.0, chromaBandwidthLower + chromaBandwidthUpper, resonance);
+            for (int i = 1; i < colfir.Length; i++)
+            {
+                colfir[i] *= 2.0;
+            }
+            double[] notchfir = new double[colfir.Length];
+            notchfir[0] = 1.0 - colfir[0];
+            for(int i = 1; i < notchfir.Length; i++)
+            {
+                notchfir[i] = -colfir[i];
+            }
+            signal = MathsUtil.FIRFilter(signal, mainfir);
+            double[] colsignal = MathsUtil.FIRFilterCrosstalkShift(signal, colfir, crosstalk, sampleTime, carrierAngFreq);
+            double[] USignal = new double[signal.Length];
+            double[] VSignal = new double[signal.Length];
+
+            double time = 0.0;
+            for (int i = 0; i < signal.Length; i++)
+            {
+                time = i * sampleTime;
+                USignal[i] = colsignal[i] * Math.Sin(carrierAngFreq * time - 0.25 * Math.PI);
+                VSignal[i] = colsignal[i] * Math.Cos(carrierAngFreq * time - 0.25 * Math.PI);
+            }
+
+            signal = MathsUtil.FIRFilterCrosstalkShift(signal, notchfir, crosstalk, sampleTime, carrierAngFreq);
+            USignal = MathsUtil.FIRFilter(USignal, colfir);
+            VSignal = MathsUtil.FIRFilter(VSignal, colfir);
+            //*/
 
             ImageData writeToSurface = new ImageData();
             writeToSurface.Width = activeWidth;
