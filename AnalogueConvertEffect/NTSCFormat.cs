@@ -2,8 +2,8 @@
 using System.Drawing;
 using System.Numerics;
 
-/* Implementation of the NTSC format
- * Maths utilities
+/*
+ * Implementation of the NTSC format
  * 2022-2023 Maxim Hoxha
  *
  * Permission is hereby granted, free of charge, to any person
