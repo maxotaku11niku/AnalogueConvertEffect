@@ -61,6 +61,7 @@ namespace AnalogueConvertEffect
                                                                  2.0 * 350000 }; //Dr
         private readonly double[] SubCarrierUpperFrequencies = { 2.0 * 350000,   //Db
                                                                  2.0 * 506000 }; //Dr
+        private readonly double SubCarrierStartTime = 0.4e-6;
 
         public override ImageData Decode(double[] signal, int activeWidth, double crosstalk = 0.0, double resonance = 1.0, double scanlineJitter = 0.0, int channelFlags = 0x7)
         {
@@ -90,7 +91,7 @@ namespace AnalogueConvertEffect
                 activeSignalStarts[i] = (int)((((double)i * (double)signal.Length) / (double)videoScanlines) + ((scanlineTime - realActiveTime) / (2 * realActiveTime)) * activeWidth);
             }
 
-            /**/ //FFT based
+            /*/ //FFT based
             Complex[] signalFT = MathsUtil.FourierTransform(signal, 1);
             double specRate = (2.0 * Math.PI * sampleRate) / signalFT.Length;
             signalFT = MathsUtil.BandPassFilter(signalFT, sampleRate, (mainBandwidth - sideBandwidth) / 2.0, mainBandwidth + sideBandwidth, resonance); //Restrict bandwidth to the actual broadcast bandwidth
@@ -132,12 +133,12 @@ namespace AnalogueConvertEffect
             }
             //*/
 
-            /*/ //FIR based
+            /**/ //FIR based
             double sampleTime = realActiveTime / (double)activeWidth;
             double[] mainfir = MathsUtil.MakeFIRFilter(sampleRate, 16, (mainBandwidth - sideBandwidth) / 2.0, mainBandwidth + sideBandwidth, resonance);
-            double[] dbfir = MathsUtil.MakeFIRFilter(sampleRate, 32, (SubCarrierUpperFrequencies[0] - SubCarrierLowerFrequencies[0]) / 2.0, SubCarrierLowerFrequencies[0] + SubCarrierUpperFrequencies[0], resonance);
-            double[] drfir = MathsUtil.MakeFIRFilter(sampleRate, 32, (SubCarrierUpperFrequencies[1] - SubCarrierLowerFrequencies[1]) / 2.0, SubCarrierLowerFrequencies[1] + SubCarrierUpperFrequencies[1], resonance);
-            double[] colfir = MathsUtil.MakeFIRFilter(sampleRate, 32, (chromaBandwidthUpper - chromaBandwidthLower) / 2.0, chromaBandwidthLower + chromaBandwidthUpper, resonance);
+            double[] dbfir = MathsUtil.MakeFIRFilter(sampleRate, 64, (SubCarrierUpperFrequencies[0] - SubCarrierLowerFrequencies[0]) / 2.0, SubCarrierLowerFrequencies[0] + SubCarrierUpperFrequencies[0], resonance);
+            double[] drfir = MathsUtil.MakeFIRFilter(sampleRate, 64, (SubCarrierUpperFrequencies[1] - SubCarrierLowerFrequencies[1]) / 2.0, SubCarrierLowerFrequencies[1] + SubCarrierUpperFrequencies[1], resonance);
+            double[] colfir = MathsUtil.MakeFIRFilter(sampleRate, 64, (chromaBandwidthUpper - chromaBandwidthLower) / 2.0, chromaBandwidthLower + chromaBandwidthUpper, resonance);
             for (int i = 1; i < colfir.Length; i++)
             {
                 colfir[i] *= 2.0;
@@ -151,6 +152,42 @@ namespace AnalogueConvertEffect
             signal = MathsUtil.FIRFilter(signal, mainfir);
             double[] DbSignal = MathsUtil.FIRFilterCrosstalkShift(signal, dbfir, crosstalk, sampleTime, SubCarrierAngFrequencies[0]);
             double[] DrSignal = MathsUtil.FIRFilterCrosstalkShift(signal, drfir, crosstalk, sampleTime, SubCarrierAngFrequencies[1]);
+
+            double time = 0.0;
+            double DbDecodeAngFreq = SubCarrierAngFrequencies[0];
+            double DrDecodeAngFreq = SubCarrierAngFrequencies[1];
+            double DbDecodePhase = 0.0;
+            double DrDecodePhase = 0.0;
+            double DbDeriv = 0.0;
+            double DrDeriv = 0.0;
+            double DbLast = 0.0;
+            double DrLast = 0.0;
+            double curDb = 0.0;
+            double curDr = 0.0;
+            double DbFreqShift = 0.0;
+            double DrFreqShift = 0.0;
+            double DbLastFreqShift = 0.0;
+            double DrLastFreqShift = 0.0;
+            for (int i = 0; i < signal.Length; i++)
+            {
+                DbDeriv = DbSignal[i] - DbLast;
+                DrDeriv = DrSignal[i] - DrLast;
+                DbLast = DbSignal[i];
+                DrLast = DrSignal[i];
+                curDb = (DbDecodeAngFreq - SubCarrierAngFrequencies[0]) / AngFrequencyShifts[0];
+                curDr = (DrDecodeAngFreq - SubCarrierAngFrequencies[1]) / AngFrequencyShifts[1];
+                DbSignal[i] = curDb;
+                DrSignal[i] = curDr;
+                DbFreqShift = -(0.115 * Math.Cos(DbDecodePhase) * DbDeriv) - (0.115 * DbDecodeAngFreq * Math.Sin(DbDecodePhase) * DbLast);
+                DrFreqShift = -(0.115 * Math.Cos(DrDecodePhase) * DrDeriv) - (0.115 * DrDecodeAngFreq * Math.Sin(DrDecodePhase) * DrLast);
+                DbDecodeAngFreq += 30.0 * (DbFreqShift - DbLastFreqShift);
+                DrDecodeAngFreq += 30.0 * (DrFreqShift - DrLastFreqShift);
+                DbDecodePhase += sampleTime * DbDecodeAngFreq;
+                DrDecodePhase += sampleTime * DrDecodeAngFreq;
+                DbLastFreqShift = DbFreqShift;
+                DrLastFreqShift = DrFreqShift;
+            }
+            
 
             signal = MathsUtil.FIRFilterCrosstalkShift(signal, notchfir, crosstalk, sampleTime, carrierAngFreq);
             DbSignal = MathsUtil.FIRFilter(DbSignal, dbfir);
@@ -239,6 +276,7 @@ namespace AnalogueConvertEffect
             double instantPhase = 0.0;
             byte[] surfaceColours = surface.Data;
             int currentScanline;
+            int subcarrierstartind = (int)((SubCarrierStartTime/realActiveTime) * ((double)surface.Width));
             for (int i = 0; i < videoScanlines; i++)
             {
                 instantPhase = 0.0;
@@ -252,13 +290,19 @@ namespace AnalogueConvertEffect
                     componentAlternate = 1;
                 }
                 else componentAlternate = 0;
-                for (int j = 0; j < activeSignalStarts[i]; j++) //Front porch, ignore sync signal because we don't see its results
+                for (int j = 0; j < subcarrierstartind; j++) //Front porch, ignore sync signal because we don't see its results
                 {
                     signalOut[pos] = 0.0;
                     pos++;
                     time = pos * sampleTime;
                 }
-                instantPhase = 0.0;
+                for (int j = subcarrierstartind; j < activeSignalStarts[i]; j++) //Front porch, ignore sync signal because we don't see its results
+                {
+                    instantPhase += sampleTime * SubCarrierAngFrequencies[componentAlternate];
+                    signalOut[pos] = 0.115 * Math.Cos(instantPhase); //Add chroma lead-in via FM
+                    pos++;
+                    time = pos * sampleTime;
+                }
                 for (int j = 0; j < surface.Width; j++) //Active signal
                 {
                     signalOut[pos] = 0.0;

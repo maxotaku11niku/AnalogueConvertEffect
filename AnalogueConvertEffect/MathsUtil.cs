@@ -35,6 +35,7 @@ namespace AnalogueConvertEffect
     {
         private static readonly double passCalcTolerance = 0.0001; //The difference from zero or one before explicit calculation of attenuation is halted, because there is no point
         private static readonly int chunkSize = 4096; //Size of the parallelisation chunks
+        public static readonly double sqrt2 = Math.Sqrt(2.0);
 
         private unsafe struct FTKernelData
         {

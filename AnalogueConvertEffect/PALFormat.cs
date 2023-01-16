@@ -109,11 +109,12 @@ namespace AnalogueConvertEffect
             double[] VSignal = new double[signal.Length];
 
             double time = 0.0;
+            
             for (int i = 0; i < signal.Length; i++)
             {
                 time = i * sampleTime;
-                USignal[i] = colsignal[i] * Math.Sin(carrierAngFreq * time - 0.25 * Math.PI);
-                VSignal[i] = colsignal[i] * Math.Cos(carrierAngFreq * time - 0.25 * Math.PI);
+                USignal[i] = colsignal[i] * Math.Sin(carrierAngFreq * time - 0.25 * Math.PI) * MathsUtil.sqrt2;
+                VSignal[i] = colsignal[i] * Math.Cos(carrierAngFreq * time - 0.25 * Math.PI) * MathsUtil.sqrt2;
             }
 
             signal = MathsUtil.FIRFilterCrosstalkShift(signal, notchfir, crosstalk, sampleTime, carrierAngFreq);
