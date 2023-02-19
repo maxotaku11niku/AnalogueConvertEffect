@@ -43,7 +43,7 @@ namespace AnalogueConvertEffect
         public string? DisplayName => "Analogue Convert";
         public string? Author => "Maxim Hoxha";
         public string? Copyright => "2022-2023 Maxim Hoxha";
-        public Version? Version => new Version("1.0.0");
+        public Version? Version => new Version("1.0.1");
         public Uri? WebsiteUri => new Uri("https://maxotaku11niku.github.io/AnalogueConvertEffect");
     }
 
@@ -87,7 +87,7 @@ namespace AnalogueConvertEffect
             properties.Add(new StaticListChoiceProperty(PropertyNames.Format, new string[] {"PAL", "NTSC", "SECAM"}, 0));
             properties.Add(new BooleanProperty(PropertyNames.Interlacing, true));
             properties.Add(new DoubleProperty(PropertyNames.Noise, 0.0, 0.0, 1.0));
-            properties.Add(new DoubleProperty(PropertyNames.PhaseNoise, 0.0, 0.0, 200.0));
+            properties.Add(new DoubleProperty(PropertyNames.PhaseNoise, 0.0, 0.0, 180.0));
             properties.Add(new DoubleProperty(PropertyNames.ScanlineJitter, 0.0, 0.0, 0.005));
             properties.Add(new DoubleProperty(PropertyNames.Crosstalk, 0.0, 0.0, 1.0));
             properties.Add(new DoubleProperty(PropertyNames.Resonance, 5.0, 1.0, 20.0));

@@ -41,8 +41,8 @@ namespace AnalogueConvertEffect
                                    0.0, //Chroma conversion phase relative to YUV (YDbDr is just YUV but scaled differently)
                                    5e+6, //Main bandwidth
                                    0.75e+6, //Side bandwidth
-                                   2.0 * 428125, //Colour bandwidth lower part
-                                   2.0 * 428125, //Colour bandwidth upper part
+                                   1.3e+6, //Colour bandwidth lower part
+                                   0.57e+6, //Colour bandwidth upper part
                                    4328125, //Colour subcarrier frequency
                                    625, //Total scanlines
                                    576, //Visible scanlines
@@ -79,8 +79,8 @@ namespace AnalogueConvertEffect
             int componentAlternate = 0; //SECAM alternates between Db and Dr with each scanline
             double sigNum = 0.0;
             double freqPoint = 0.0;
-            double sampleRate = signal.Length / frameTime;
-            
+            double sampleRate = ((double)signal.Length * (((double)scanlines) / ((double)videoScanlines))) / frameTime; //Correction for the fact that the signal we've created only has active scanlines.
+
             double blendStr = 1.0 - crosstalk;
             bool inclY = ((channelFlags & 0x1) == 0) ? false : true;
             bool inclDb = ((channelFlags & 0x2) == 0) ? false : true;
@@ -91,54 +91,11 @@ namespace AnalogueConvertEffect
                 activeSignalStarts[i] = (int)((((double)i * (double)signal.Length) / (double)videoScanlines) + ((scanlineTime - realActiveTime) / (2 * realActiveTime)) * activeWidth);
             }
 
-            /*/ //FFT based
-            Complex[] signalFT = MathsUtil.FourierTransform(signal, 1);
-            double specRate = (2.0 * Math.PI * sampleRate) / signalFT.Length;
-            signalFT = MathsUtil.BandPassFilter(signalFT, sampleRate, (mainBandwidth - sideBandwidth) / 2.0, mainBandwidth + sideBandwidth, resonance); //Restrict bandwidth to the actual broadcast bandwidth
-            Complex[] DbColourSignalFT = MathsUtil.BandPassFilter(signalFT, sampleRate, ((SubCarrierUpperFrequencies[0] - SubCarrierLowerFrequencies[0]) / 2.0) + SubCarrierFrequencies[0], SubCarrierLowerFrequencies[0] + SubCarrierUpperFrequencies[0], resonance, blendStr); //Extract colour information
-            Complex[] DrColourSignalFT = MathsUtil.BandPassFilter(signalFT, sampleRate, ((SubCarrierUpperFrequencies[1] - SubCarrierLowerFrequencies[1]) / 2.0) + SubCarrierFrequencies[1], SubCarrierLowerFrequencies[1] + SubCarrierUpperFrequencies[1], resonance, blendStr);
-            DbColourSignalFT = MathsUtil.ShiftArrayInterp(DbColourSignalFT, (3916800.0 / sampleRate) * DbColourSignalFT.Length); //apologies for the fudge factor
-            DrColourSignalFT = MathsUtil.ShiftArrayInterp(DrColourSignalFT, (4060800.0 / sampleRate) * DrColourSignalFT.Length); //apologies for the fudge factor
-            Complex[] DbSignalFTDiff = new Complex[DbColourSignalFT.Length];
-            Complex[] DrSignalFTDiff = new Complex[DrColourSignalFT.Length];
-            for(int i = -DbColourSignalFT.Length / 2; i < DbColourSignalFT.Length / 2; i++)
-            {
-                freqPoint = i * specRate;
-                DbSignalFTDiff[(i + DbColourSignalFT.Length) % DbColourSignalFT.Length] = DbColourSignalFT[(i + DbColourSignalFT.Length) % DbColourSignalFT.Length] * Complex.ImaginaryOne * freqPoint;
-                DrSignalFTDiff[(i + DrColourSignalFT.Length) % DrColourSignalFT.Length] = DrColourSignalFT[(i + DrColourSignalFT.Length) % DrColourSignalFT.Length] * Complex.ImaginaryOne * freqPoint;
-            }
-            Complex[] DbSignalIFT = MathsUtil.InverseFourierTransform(DbColourSignalFT);
-            Complex[] DrSignalIFT = MathsUtil.InverseFourierTransform(DrColourSignalFT);
-            Complex[] DbSignalIFTDiff = MathsUtil.InverseFourierTransform(DbSignalFTDiff);
-            Complex[] DrSignalIFTDiff = MathsUtil.InverseFourierTransform(DrSignalFTDiff);
-            Complex[] DbSignalFinal = new Complex[DbSignalIFT.Length];
-            Complex[] DrSignalFinal = new Complex[DrSignalIFT.Length];
-            for (int i = 0; i < DbSignalFinal.Length; i++)
-            {
-                DbSignalFinal[i] = (DbSignalIFTDiff[i] * Complex.Conjugate(DbSignalIFT[i])) / AngFrequencyShifts[0];
-                DrSignalFinal[i] = (DrSignalIFTDiff[i] * Complex.Conjugate(DrSignalIFT[i])) / AngFrequencyShifts[1];
-            }
-            DbSignalFinal = MathsUtil.ShiftFilter(DbSignalFinal, 5.0E-7 * sampleRate, 0.5, 1.0);
-            DrSignalFinal = MathsUtil.ShiftFilter(DrSignalFinal, 5.0E-7 * sampleRate, 0.5, 1.0);
-            double[] DbSignal = new double[signal.Length];
-            double[] DrSignal = new double[signal.Length];
-            signalFT = MathsUtil.NotchFilter(signalFT, sampleRate, ((chromaBandwidthUpper - chromaBandwidthLower) / 2.0) + chromaCarrierFrequency, chromaBandwidthLower + chromaBandwidthUpper, resonance, blendStr);
-            Complex[] finalSignal = MathsUtil.InverseFourierTransform(signalFT);
-
-            for (int i = 0; i < signal.Length; i++)
-            {
-                signal[i] = 1.0 * finalSignal[finalSignal.Length - 1 - i].Real;
-                DbSignal[i] = 400.0 * (DbSignalFinal[finalSignal.Length - 1 - i].Imaginary);
-                DrSignal[i] = 400.0 * (DrSignalFinal[finalSignal.Length - 1 - i].Imaginary);
-            }
-            //*/
-
-            /**/ //FIR based
             double sampleTime = realActiveTime / (double)activeWidth;
-            double[] mainfir = MathsUtil.MakeFIRFilter(sampleRate, 16, (mainBandwidth - sideBandwidth) / 2.0, mainBandwidth + sideBandwidth, resonance);
-            double[] dbfir = MathsUtil.MakeFIRFilter(sampleRate, 64, (SubCarrierUpperFrequencies[0] - SubCarrierLowerFrequencies[0]) / 2.0, SubCarrierLowerFrequencies[0] + SubCarrierUpperFrequencies[0], resonance);
-            double[] drfir = MathsUtil.MakeFIRFilter(sampleRate, 64, (SubCarrierUpperFrequencies[1] - SubCarrierLowerFrequencies[1]) / 2.0, SubCarrierLowerFrequencies[1] + SubCarrierUpperFrequencies[1], resonance);
-            double[] colfir = MathsUtil.MakeFIRFilter(sampleRate, 64, (chromaBandwidthUpper - chromaBandwidthLower) / 2.0, chromaBandwidthLower + chromaBandwidthUpper, resonance);
+            double[] mainfir = MathsUtil.MakeFIRFilter(sampleRate, 80, (mainBandwidth - sideBandwidth) / 2.0, mainBandwidth + sideBandwidth, resonance);
+            double[] dbfir = MathsUtil.MakeFIRFilter(sampleRate, 128, (chromaBandwidthUpper - chromaBandwidthLower) / 2.0, chromaBandwidthLower + chromaBandwidthUpper, resonance);
+            double[] drfir = MathsUtil.MakeFIRFilter(sampleRate, 128, (chromaBandwidthUpper - chromaBandwidthLower) / 2.0, chromaBandwidthLower + chromaBandwidthUpper, resonance);
+            double[] colfir = MathsUtil.MakeFIRFilter(sampleRate, 128, (chromaBandwidthUpper - chromaBandwidthLower) / 2.0, chromaBandwidthLower + chromaBandwidthUpper, resonance);
             for (int i = 1; i < colfir.Length; i++)
             {
                 colfir[i] *= 2.0;
@@ -180,8 +137,8 @@ namespace AnalogueConvertEffect
                 DrSignal[i] = curDr;
                 DbFreqShift = -(0.115 * Math.Cos(DbDecodePhase) * DbDeriv) - (0.115 * DbDecodeAngFreq * Math.Sin(DbDecodePhase) * DbLast);
                 DrFreqShift = -(0.115 * Math.Cos(DrDecodePhase) * DrDeriv) - (0.115 * DrDecodeAngFreq * Math.Sin(DrDecodePhase) * DrLast);
-                DbDecodeAngFreq += 30.0 * (DbFreqShift - DbLastFreqShift);
-                DrDecodeAngFreq += 30.0 * (DrFreqShift - DrLastFreqShift);
+                DbDecodeAngFreq += 35.0 * (DbFreqShift - DbLastFreqShift);
+                DrDecodeAngFreq += 35.0 * (DrFreqShift - DrLastFreqShift);
                 DbDecodePhase += sampleTime * DbDecodeAngFreq;
                 DrDecodePhase += sampleTime * DrDecodeAngFreq;
                 DbLastFreqShift = DbFreqShift;
@@ -192,7 +149,6 @@ namespace AnalogueConvertEffect
             signal = MathsUtil.FIRFilterCrosstalkShift(signal, notchfir, crosstalk, sampleTime, carrierAngFreq);
             DbSignal = MathsUtil.FIRFilter(DbSignal, dbfir);
             DrSignal = MathsUtil.FIRFilter(DrSignal, drfir);
-            //*/
 
             ImageData writeToSurface = new ImageData();
             writeToSurface.Width = activeWidth;
@@ -277,7 +233,7 @@ namespace AnalogueConvertEffect
             byte[] surfaceColours = surface.Data;
             int currentScanline;
             int subcarrierstartind = (int)((SubCarrierStartTime/realActiveTime) * ((double)surface.Width));
-            for (int i = 0; i < videoScanlines; i++)
+            for (int i = 0; i < videoScanlines; i++) //Only generate active scanlines
             {
                 instantPhase = 0.0;
                 if (i * 2 >= videoScanlines) //Simulate interlacing

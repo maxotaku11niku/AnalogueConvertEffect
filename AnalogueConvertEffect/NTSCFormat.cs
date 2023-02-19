@@ -64,7 +64,7 @@ namespace AnalogueConvertEffect
             int pos = 0;
             int posdel = 0;
             double sigNum = 0.0;
-            double sampleRate = signal.Length / frameTime;
+            double sampleRate = ((double)signal.Length * (((double)scanlines) / ((double)videoScanlines))) / frameTime; //Correction for the fact that the signal we've created only has active scanlines.
             double blendStr = 1.0 - crosstalk;
             double c = Math.Cos(chromaPhase);
             double s = Math.Sin(chromaPhase);
@@ -72,33 +72,10 @@ namespace AnalogueConvertEffect
             bool inclQ = ((channelFlags & 0x2) == 0) ? false : true;
             bool inclI = ((channelFlags & 0x4) == 0) ? false : true;
 
-            /*/ //FFT based
-            Complex[] signalFT = MathsUtil.FourierTransform(signal, 1);
-            signalFT = MathsUtil.BandPassFilter(signalFT, sampleRate, (mainBandwidth - sideBandwidth) / 2.0, mainBandwidth + sideBandwidth, resonance); //Restrict bandwidth to the actual broadcast bandwidth
-            Complex[] QcolourSignalFT = MathsUtil.BandPassFilter(signalFT, sampleRate, chromaCarrierFrequency, 2 * chromaBandwidthUpper, resonance, blendStr); //Extract colour information
-            Complex[] IcolourSignalFT = MathsUtil.BandPassFilter(signalFT, sampleRate, ((chromaBandwidthUpper - chromaBandwidthLower) / 2.0) + chromaCarrierFrequency, chromaBandwidthLower + chromaBandwidthUpper, resonance, blendStr); //Q has less resolution than I
-            QcolourSignalFT = MathsUtil.ShiftArrayInterp(QcolourSignalFT, ((chromaCarrierFrequency - 306820.0) / sampleRate) * QcolourSignalFT.Length); //apologies for the fudge factor
-            IcolourSignalFT = MathsUtil.ShiftArrayInterp(IcolourSignalFT, ((((chromaBandwidthUpper - chromaBandwidthLower) / 2.0) + chromaCarrierFrequency + 33180.0) / sampleRate) * IcolourSignalFT.Length); //apologies for the fudge factor
-            Complex[] QSignalIFT = MathsUtil.InverseFourierTransform(QcolourSignalFT);
-            Complex[] ISignalIFT = MathsUtil.InverseFourierTransform(IcolourSignalFT);
-            double[] QSignal = new double[signal.Length];
-            double[] ISignal = new double[signal.Length];
-            signalFT = MathsUtil.NotchFilter(signalFT, sampleRate, ((chromaBandwidthUpper - chromaBandwidthLower) / 2.0) + chromaCarrierFrequency, chromaBandwidthLower + chromaBandwidthUpper, resonance, blendStr);
-            Complex[] finalSignal = MathsUtil.InverseFourierTransform(signalFT);
-
-            for (int i = 0; i < signal.Length; i++)
-            {
-                signal[i] = 1.0 * finalSignal[finalSignal.Length - 1 - i].Real;
-                QSignal[i] = 2.0 * (-c * (QSignalIFT[finalSignal.Length - 1 - i].Imaginary) + s * (QSignalIFT[finalSignal.Length - 1 - i].Real));
-                ISignal[i] = 2.0 * (c * (ISignalIFT[finalSignal.Length - 1 - i].Real) + s * (ISignalIFT[finalSignal.Length - 1 - i].Imaginary));
-            }
-            //*/
-
-            /**/ //FIR based
             double sampleTime = realActiveTime / (double)activeWidth;
-            double[] mainfir = MathsUtil.MakeFIRFilter(sampleRate, 16, (mainBandwidth - sideBandwidth) / 2.0, mainBandwidth + sideBandwidth, resonance);
-            double[] qfir = MathsUtil.MakeFIRFilter(sampleRate, 32, 0.0, 2.0 * chromaBandwidthUpper, resonance); //Q has less resolution than I
-            double[] ifir = MathsUtil.MakeFIRFilter(sampleRate, 32, (chromaBandwidthUpper - chromaBandwidthLower) / 2.0, chromaBandwidthLower + chromaBandwidthUpper, resonance);
+            double[] mainfir = MathsUtil.MakeFIRFilter(sampleRate, 80, (mainBandwidth - sideBandwidth) / 2.0, mainBandwidth + sideBandwidth, resonance);
+            double[] qfir = MathsUtil.MakeFIRFilter(sampleRate, 80, 0.0, 2.0 * chromaBandwidthUpper, resonance); //Q has less resolution than I
+            double[] ifir = MathsUtil.MakeFIRFilter(sampleRate, 80, (chromaBandwidthUpper - chromaBandwidthLower) / 2.0, chromaBandwidthLower + chromaBandwidthUpper, resonance);
             for (int i = 1; i < qfir.Length; i++)
             {
                 qfir[i] *= 2.0;
@@ -128,7 +105,6 @@ namespace AnalogueConvertEffect
             signal = MathsUtil.FIRFilterCrosstalkShift(signal, notchfir, crosstalk, sampleTime, carrierAngFreq);
             QSignal = MathsUtil.FIRFilter(QSignal, qfir);
             ISignal = MathsUtil.FIRFilter(ISignal, ifir);
-            //*/
 
             ImageData writeToSurface = new ImageData();
             writeToSurface.Width = activeWidth;
@@ -205,7 +181,7 @@ namespace AnalogueConvertEffect
 
             byte[] surfaceColours = surface.Data;
             int currentScanline;
-            for (int i = 0; i < videoScanlines; i++)
+            for (int i = 0; i < videoScanlines; i++) //Only generate active scanlines
             {
                 if (i * 2 >= videoScanlines) //Simulate interlacing
                 {
