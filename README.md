@@ -1,3 +1,5 @@
+![Comparison of the effect of Analogue Convert Effect on an image of my OC using the PAL format.](analogue_comparison_pal_tachya.jpg)
+
 # AnalogueConvertEffect
 **Physically realistic still-image analogue filter for Paint.NET**
 
