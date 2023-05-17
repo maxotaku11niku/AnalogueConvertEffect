@@ -14,6 +14,10 @@ Determines the video format to use, which can dramatically affect the output ima
 
 Interlacing is drawing only alternate scanlines in any given field, a technique intended to fake a doubled framerate. The effect on a still image is mostly to do with the effective quality of the image. Disabling this will halve the horizontal resolution.
 
+## Your Monitor's Gamma
+
+In order to generate a faithful analogue signal, the raw RGB values in the image must be gamma transformed. This is where you put your monitor's gamma in order for the effect to gamma transform in the way specified by the standards. If you don't know your monitor's gamma, you can fiddle about with this setting until the image looks right.
+
 ## Noise Amount
 
 Adds white noise to the signal.

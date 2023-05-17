@@ -33,6 +33,8 @@ namespace AnalogueConvertEffect
     //The PAL format, used in Europe etc.
     public class PALFormat : AnalogueFormat
     {
+        const double PALGamma = 2.8;
+
         public PALFormat() : base(0.299, //R to Y
                                   0.587, //G to Y
                                   0.114, //B to Y
@@ -51,7 +53,7 @@ namespace AnalogueConvertEffect
                                   true) //Interlaced?
         { }
 
-        public override ImageData Decode(double[] signal, int activeWidth, double crosstalk = 0.0, double resonance = 1.0, double scanlineJitter = 0.0, int channelFlags = 0x7)
+        public override ImageData Decode(double[] signal, int activeWidth, double crosstalk = 0.0, double resonance = 1.0, double scanlineJitter = 0.0, double monitorGamma = 2.5, int channelFlags = 0x7)
         {
             int[] activeSignalStarts = new int[videoScanlines]; //Start points of the active parts
             byte R = 0;
@@ -189,6 +191,7 @@ namespace AnalogueConvertEffect
             int currentScanline;
             Random rng = new Random();
             int curjit = 0;
+            double gammaFactor = monitorGamma / PALGamma;
             for (int i = 0; i < videoScanlines; i++)
             {
                 if (i * 2 >= videoScanlines) //Simulate interlacing
@@ -204,9 +207,9 @@ namespace AnalogueConvertEffect
                     Y = inclY ? signal[pos] : 0.5;
                     U = inclU ? USignal[pos] : 0.0;
                     V = inclV ? VSignal[pos] : 0.0;
-                    R = (byte)(MathsUtil.Clamp(Math.Pow(YUVtoRGBConversionMatrix[0] * Y + YUVtoRGBConversionMatrix[2] * V, 0.357), 0.0, 1.0) * 255.0);
-                    G = (byte)(MathsUtil.Clamp(Math.Pow(YUVtoRGBConversionMatrix[3] * Y + YUVtoRGBConversionMatrix[4] * U + YUVtoRGBConversionMatrix[5] * V, 0.357), 0.0, 1.0) * 255.0);
-                    B = (byte)(MathsUtil.Clamp(Math.Pow(YUVtoRGBConversionMatrix[6] * Y + YUVtoRGBConversionMatrix[7] * U, 0.357), 0.0, 1.0) * 255.0);
+                    R = (byte)(MathsUtil.Clamp(Math.Pow(YUVtoRGBConversionMatrix[0] * Y + YUVtoRGBConversionMatrix[2] * V, gammaFactor), 0.0, 1.0) * 255.0);
+                    G = (byte)(MathsUtil.Clamp(Math.Pow(YUVtoRGBConversionMatrix[3] * Y + YUVtoRGBConversionMatrix[4] * U + YUVtoRGBConversionMatrix[5] * V, gammaFactor), 0.0, 1.0) * 255.0);
+                    B = (byte)(MathsUtil.Clamp(Math.Pow(YUVtoRGBConversionMatrix[6] * Y + YUVtoRGBConversionMatrix[7] * U, gammaFactor), 0.0, 1.0) * 255.0);
                     surfaceColours[(currentScanline * writeToSurface.Width + j) * 4 + 3] = 255;
                     surfaceColours[(currentScanline * writeToSurface.Width + j) * 4 + 2] = R;
                     surfaceColours[(currentScanline * writeToSurface.Width + j) * 4 + 1] = G;
@@ -217,7 +220,7 @@ namespace AnalogueConvertEffect
             return writeToSurface;
         }
 
-        public override double[] Encode(ImageData surface)
+        public override double[] Encode(ImageData surface, double monitorGamma = 2.5)
         {
             int signalLen = (int)(surface.Width * videoScanlines * (scanlineTime / realActiveTime)); //To get a good analogue feel, we must limit the vertical resolution; the horizontal resolution will be limited as we decode the distorted signal.
             int[] boundaryPoints = new int[videoScanlines + 1]; //Boundaries of the scanline signals
@@ -251,6 +254,7 @@ namespace AnalogueConvertEffect
 
             byte[] surfaceColours = surface.Data;
             int currentScanline;
+            double gammaFactor = PALGamma / monitorGamma;
             for (int i = 0; i < videoScanlines; i++) //Only generate active scanlines
             {
                 if (i * 2 >= videoScanlines) //Simulate interlacing
@@ -275,9 +279,9 @@ namespace AnalogueConvertEffect
                     R = surfaceColours[(currentScanline * surface.Width + j) * 4 + 2] / 255.0;
                     G = surfaceColours[(currentScanline * surface.Width + j) * 4 + 1] / 255.0;
                     B = surfaceColours[(currentScanline * surface.Width + j) * 4] / 255.0;
-                    R = Math.Pow(R, 2.8); //Gamma correction
-                    G = Math.Pow(G, 2.8);
-                    B = Math.Pow(B, 2.8);
+                    R = Math.Pow(R, gammaFactor); //Gamma correction
+                    G = Math.Pow(G, gammaFactor);
+                    B = Math.Pow(B, gammaFactor);
                     U = RGBtoYUVConversionMatrix[3] * R + RGBtoYUVConversionMatrix[4] * G + RGBtoYUVConversionMatrix[5] * B; //Encode U and V
                     V = RGBtoYUVConversionMatrix[6] * R + RGBtoYUVConversionMatrix[7] * G + RGBtoYUVConversionMatrix[8] * B;
                     signalOut[pos] += RGBtoYUVConversionMatrix[0] * R + RGBtoYUVConversionMatrix[1] * G + RGBtoYUVConversionMatrix[2] * B; //Add luma straightforwardly

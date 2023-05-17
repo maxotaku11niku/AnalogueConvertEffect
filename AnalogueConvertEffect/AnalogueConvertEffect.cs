@@ -54,6 +54,7 @@ namespace AnalogueConvertEffect
         {
             Format,
             Interlacing,
+            MonitorGamma,
             Noise,
             PhaseNoise,
             ScanlineJitter,
@@ -65,6 +66,7 @@ namespace AnalogueConvertEffect
         }
         string chosenFormat;
         bool interlace;
+        double monitorGamma;
         double noiseAmount;
         double phaseNoise;
         double jitter;
@@ -86,6 +88,7 @@ namespace AnalogueConvertEffect
             List<Property> properties = new List<Property>();
             properties.Add(new StaticListChoiceProperty(PropertyNames.Format, new string[] {"PAL", "NTSC", "SECAM"}, 0));
             properties.Add(new BooleanProperty(PropertyNames.Interlacing, true));
+            properties.Add(new DoubleProperty(PropertyNames.MonitorGamma, 2.5, 1.0, 4.0));
             properties.Add(new DoubleProperty(PropertyNames.Noise, 0.0, 0.0, 1.0));
             properties.Add(new DoubleProperty(PropertyNames.PhaseNoise, 0.0, 0.0, 180.0));
             properties.Add(new DoubleProperty(PropertyNames.ScanlineJitter, 0.0, 0.0, 0.005));
@@ -103,6 +106,7 @@ namespace AnalogueConvertEffect
             ControlInfo controlUI = PropertyControlInfo.CreateDefaultConfigUI(props);
             controlUI.SetPropertyControlValue(PropertyNames.Format, ControlInfoPropertyNames.DisplayName, "Format");
             controlUI.SetPropertyControlValue(PropertyNames.Interlacing, ControlInfoPropertyNames.DisplayName, "Do Interlacing?");
+            controlUI.SetPropertyControlValue(PropertyNames.MonitorGamma, ControlInfoPropertyNames.DisplayName, "Your Monitor's Gamma");
             controlUI.SetPropertyControlValue(PropertyNames.Noise, ControlInfoPropertyNames.DisplayName, "Noise Amount");
             controlUI.SetPropertyControlValue(PropertyNames.Noise, ControlInfoPropertyNames.DecimalPlaces, 3);
             controlUI.SetPropertyControlValue(PropertyNames.PhaseNoise, ControlInfoPropertyNames.DisplayName, "Phase Noise");
@@ -121,6 +125,7 @@ namespace AnalogueConvertEffect
         {
             chosenFormat = (string)newToken.GetProperty<StaticListChoiceProperty>(PropertyNames.Format).Value;
             interlace = newToken.GetProperty<BooleanProperty>(PropertyNames.Interlacing).Value;
+            monitorGamma = newToken.GetProperty<DoubleProperty>(PropertyNames.MonitorGamma).Value;
             noiseAmount = newToken.GetProperty<DoubleProperty>(PropertyNames.Noise).Value;
             phaseNoise = newToken.GetProperty<DoubleProperty>(PropertyNames.PhaseNoise).Value;
             jitter = newToken.GetProperty<DoubleProperty>(PropertyNames.ScanlineJitter).Value;
@@ -243,9 +248,9 @@ namespace AnalogueConvertEffect
             {
                 inIDat.Data[i] = wrkblk[i];
             }
-            double[] signal = format.Encode(inIDat);
+            double[] signal = format.Encode(inIDat, monitorGamma);
             DistortSignal(signal, signal.Length * format.Framerate, format.SubcarrierFrequency, format.BoundaryPoints);
-            ImageData outIDat = format.Decode(signal, wrkWidth, crosstalk, resonance, jitter, (doY ? 0x1 : 0x0) | (doU ? 0x2 : 0x0) | (doV ? 0x4 : 0x0));
+            ImageData outIDat = format.Decode(signal, wrkWidth, crosstalk, resonance, jitter, monitorGamma, (doY ? 0x1 : 0x0) | (doU ? 0x2 : 0x0) | (doV ? 0x4 : 0x0));
             Surface destSurf = new Surface(surrRect.Size);
             for (int i = 0; i < inIDat.Data.Length; i++)
             {

@@ -33,6 +33,8 @@ namespace AnalogueConvertEffect
     //The SECAM format, used in France etc.
     public class SECAMFormat : AnalogueFormat
     {
+        const double SECAMGamma = 2.8;
+
         public SECAMFormat() : base(0.299, //R to Y
                                    0.587, //G to Y
                                    0.114, //B to Y
@@ -63,7 +65,7 @@ namespace AnalogueConvertEffect
                                                                  2.0 * 506000 }; //Dr
         private readonly double SubCarrierStartTime = 0.4e-6;
 
-        public override ImageData Decode(double[] signal, int activeWidth, double crosstalk = 0.0, double resonance = 1.0, double scanlineJitter = 0.0, int channelFlags = 0x7)
+        public override ImageData Decode(double[] signal, int activeWidth, double crosstalk = 0.0, double resonance = 1.0, double scanlineJitter = 0.0, double monitorGamma = 2.5, int channelFlags = 0x7)
         {
             int[] activeSignalStarts = new int[videoScanlines]; //Start points of the active parts
             byte R = 0;
@@ -107,10 +109,22 @@ namespace AnalogueConvertEffect
                 notchfir[i] = -colfir[i];
             }
             signal = MathsUtil.FIRFilter(signal, mainfir);
-            double[] DbSignal = MathsUtil.FIRFilterCrosstalkShift(signal, dbfir, crosstalk, sampleTime, SubCarrierAngFrequencies[0]);
-            double[] DrSignal = MathsUtil.FIRFilterCrosstalkShift(signal, drfir, crosstalk, sampleTime, SubCarrierAngFrequencies[1]);
+            double[] DbSignalPre = MathsUtil.FIRFilterCrosstalkShift(signal, dbfir, crosstalk, sampleTime, SubCarrierAngFrequencies[0]);
+            double[] DrSignalPre = MathsUtil.FIRFilterCrosstalkShift(signal, drfir, crosstalk, sampleTime, SubCarrierAngFrequencies[1]);
+            double[] DbSignal = new double[DbSignalPre.Length];
+            double[] DrSignal = new double[DrSignalPre.Length];
+            int combdelay = 1;
+            for(int i = 0; i < combdelay; i++)
+            {
+                DbSignal[i] = DbSignalPre[i];
+                DrSignal[i] = DrSignalPre[i];
+            }
+            for (int i = combdelay; i < signal.Length; i++)
+            {
+                DbSignal[i] = 0.5 * (DbSignalPre[i] - DbSignalPre[i - combdelay]);
+                DrSignal[i] = 0.5 * (DrSignalPre[i] - DrSignalPre[i - combdelay]);
+            }
 
-            double time = 0.0;
             double DbDecodeAngFreq = SubCarrierAngFrequencies[0];
             double DrDecodeAngFreq = SubCarrierAngFrequencies[1];
             double DbDecodePhase = 0.0;
@@ -137,14 +151,14 @@ namespace AnalogueConvertEffect
                 DrSignal[i] = curDr;
                 DbFreqShift = -(0.115 * Math.Cos(DbDecodePhase) * DbDeriv) - (0.115 * DbDecodeAngFreq * Math.Sin(DbDecodePhase) * DbLast);
                 DrFreqShift = -(0.115 * Math.Cos(DrDecodePhase) * DrDeriv) - (0.115 * DrDecodeAngFreq * Math.Sin(DrDecodePhase) * DrLast);
-                DbDecodeAngFreq += 35.0 * (DbFreqShift - DbLastFreqShift);
-                DrDecodeAngFreq += 35.0 * (DrFreqShift - DrLastFreqShift);
+                DbDecodeAngFreq += 62.0 * (DbFreqShift - DbLastFreqShift);
+                DrDecodeAngFreq += 62.0 * (DrFreqShift - DrLastFreqShift);
                 DbDecodePhase += sampleTime * DbDecodeAngFreq;
                 DrDecodePhase += sampleTime * DrDecodeAngFreq;
                 DbLastFreqShift = DbFreqShift;
                 DrLastFreqShift = DrFreqShift;
             }
-            
+
 
             signal = MathsUtil.FIRFilterCrosstalkShift(signal, notchfir, crosstalk, sampleTime, carrierAngFreq);
             DbSignal = MathsUtil.FIRFilter(DbSignal, dbfir);
@@ -159,6 +173,7 @@ namespace AnalogueConvertEffect
             int currentScanline;
             Random rng = new Random();
             int curjit = 0;
+            double gammaFactor = monitorGamma / SECAMGamma;
             for (int i = 0; i < videoScanlines; i++)
             {
                 if (i * 2 >= videoScanlines) //Simulate interlacing
@@ -182,9 +197,9 @@ namespace AnalogueConvertEffect
                     Y = inclY ? signal[pos] : 0.5;
                     Db = inclDb ? DbSignal[DbPos] : 0.0;
                     Dr = inclDr ? DrSignal[DrPos] : 0.0;
-                    R = (byte)(MathsUtil.Clamp(Math.Pow(YUVtoRGBConversionMatrix[0] * Y + YUVtoRGBConversionMatrix[2] * Dr, 0.357), 0.0, 1.0) * 255.0);
-                    G = (byte)(MathsUtil.Clamp(Math.Pow(YUVtoRGBConversionMatrix[3] * Y + YUVtoRGBConversionMatrix[4] * Db + YUVtoRGBConversionMatrix[5] * Dr, 0.357), 0.0, 1.0) * 255.0);
-                    B = (byte)(MathsUtil.Clamp(Math.Pow(YUVtoRGBConversionMatrix[6] * Y + YUVtoRGBConversionMatrix[7] * Db, 0.357), 0.0, 1.0) * 255.0);
+                    R = (byte)(MathsUtil.Clamp(Math.Pow(YUVtoRGBConversionMatrix[0] * Y + YUVtoRGBConversionMatrix[2] * Dr, gammaFactor), 0.0, 1.0) * 255.0);
+                    G = (byte)(MathsUtil.Clamp(Math.Pow(YUVtoRGBConversionMatrix[3] * Y + YUVtoRGBConversionMatrix[4] * Db + YUVtoRGBConversionMatrix[5] * Dr, gammaFactor), 0.0, 1.0) * 255.0);
+                    B = (byte)(MathsUtil.Clamp(Math.Pow(YUVtoRGBConversionMatrix[6] * Y + YUVtoRGBConversionMatrix[7] * Db, gammaFactor), 0.0, 1.0) * 255.0);
                     surfaceColours[(currentScanline * writeToSurface.Width + j) * 4 + 3] = 255;
                     surfaceColours[(currentScanline * writeToSurface.Width + j) * 4 + 2] = R;
                     surfaceColours[(currentScanline * writeToSurface.Width + j) * 4 + 1] = G;
@@ -197,7 +212,7 @@ namespace AnalogueConvertEffect
             return writeToSurface;
         }
 
-        public override double[] Encode(ImageData surface)
+        public override double[] Encode(ImageData surface, double monitorGamma = 2.5)
         {
             int signalLen = (int)(surface.Width * videoScanlines * (scanlineTime / realActiveTime)); //To get a good analogue feel, we must limit the vertical resolution; the horizontal resolution will be limited as we decode the distorted signal.
             int[] boundaryPoints = new int[videoScanlines + 1]; //Boundaries of the scanline signals
@@ -233,6 +248,7 @@ namespace AnalogueConvertEffect
             byte[] surfaceColours = surface.Data;
             int currentScanline;
             int subcarrierstartind = (int)((SubCarrierStartTime/realActiveTime) * ((double)surface.Width));
+            double gammaFactor = SECAMGamma / monitorGamma;
             for (int i = 0; i < videoScanlines; i++) //Only generate active scanlines
             {
                 instantPhase = 0.0;
@@ -265,9 +281,9 @@ namespace AnalogueConvertEffect
                     R = surfaceColours[(currentScanline * surface.Width + j) * 4 + 2] / 255.0;
                     G = surfaceColours[(currentScanline * surface.Width + j) * 4 + 1] / 255.0;
                     B = surfaceColours[(currentScanline * surface.Width + j) * 4] / 255.0;
-                    R = Math.Pow(R, 2.8); //Gamma correction
-                    G = Math.Pow(G, 2.8);
-                    B = Math.Pow(B, 2.8);
+                    R = Math.Pow(R, gammaFactor); //Gamma correction
+                    G = Math.Pow(G, gammaFactor);
+                    B = Math.Pow(B, gammaFactor);
                     Db = RGBtoYUVConversionMatrix[3] * R + RGBtoYUVConversionMatrix[4] * G + RGBtoYUVConversionMatrix[5] * B; //Encode Db and Dr
                     Dr = RGBtoYUVConversionMatrix[6] * R + RGBtoYUVConversionMatrix[7] * G + RGBtoYUVConversionMatrix[8] * B;
                     instantPhase += sampleTime * (SubCarrierAngFrequencies[componentAlternate] + AngFrequencyShifts[componentAlternate] * (componentAlternate == 0 ? Db : Dr));
