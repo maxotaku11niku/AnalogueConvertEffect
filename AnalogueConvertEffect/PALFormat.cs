@@ -1,5 +1,4 @@
-﻿using PaintDotNet;
-using System;
+﻿using System;
 using System.Numerics;
 
 /*
@@ -53,7 +52,7 @@ namespace AnalogueConvertEffect
                                   true) //Interlaced?
         { }
 
-        public override ImageData Decode(double[] signal, int activeWidth, double crosstalk = 0.0, double resonance = 1.0, double scanlineJitter = 0.0, double monitorGamma = 2.5, int channelFlags = 0x7)
+        public override ImageData Decode(double[] signal, int activeWidth, double bwMult = 1.0, double crosstalk = 0.0, double resonance = 1.0, double scanlineJitter = 0.0, double monitorGamma = 2.5, int channelFlags = 0x7)
         {
             int[] activeSignalStarts = new int[videoScanlines]; //Start points of the active parts
             byte R = 0;
@@ -73,8 +72,8 @@ namespace AnalogueConvertEffect
             bool inclV = ((channelFlags & 0x4) == 0) ? false : true;
 
             double sampleTime = realActiveTime / (double)activeWidth;
-            double[] mainfir = MathsUtil.MakeFIRFilter(sampleRate, 80, (mainBandwidth - sideBandwidth) / 2.0, mainBandwidth + sideBandwidth, resonance);
-            double[] colfir = MathsUtil.MakeFIRFilter(sampleRate, 80, (chromaBandwidthUpper - chromaBandwidthLower) / 2.0, chromaBandwidthLower + chromaBandwidthUpper, resonance);
+            double[] mainfir = MathsUtil.MakeFIRFilter(sampleRate, (int)(80.0 / bwMult), ((mainBandwidth - sideBandwidth) / 2.0) * bwMult, (mainBandwidth + sideBandwidth) * bwMult, resonance);
+            double[] colfir = MathsUtil.MakeFIRFilter(sampleRate, (int)(80.0 / bwMult), ((chromaBandwidthUpper - chromaBandwidthLower) / 2.0) * bwMult, (chromaBandwidthLower + chromaBandwidthUpper) * bwMult, resonance);
             for (int i = 1; i < colfir.Length; i++)
             {
                 colfir[i] *= 2.0;
@@ -85,8 +84,8 @@ namespace AnalogueConvertEffect
             {
                 notchfir[i] = -colfir[i];
             }
-            signal = MathsUtil.FIRFilter(signal, mainfir);
             double[] colsignal = MathsUtil.FIRFilterCrosstalkShift(signal, colfir, crosstalk, sampleTime, carrierAngFreq);
+            signal = MathsUtil.FIRFilter(signal, mainfir);
             double[] USignal = new double[signal.Length];
             double[] VSignal = new double[signal.Length];
             double[] USignalPreAlt = new double[signal.Length];
@@ -97,8 +96,8 @@ namespace AnalogueConvertEffect
             for (int i = 0; i < signal.Length; i++)
             {
                 time = i * sampleTime;
-                USignalPreAlt[i] = colsignal[i] * Math.Sin(carrierAngFreq * time - 0.25 * Math.PI) * MathsUtil.sqrt2;
-                VSignalPreAlt[i] = colsignal[i] * Math.Cos(carrierAngFreq * time - 0.25 * Math.PI) * MathsUtil.sqrt2;
+                USignalPreAlt[i] = colsignal[i] * Math.Sin(carrierAngFreq * time);
+                VSignalPreAlt[i] = colsignal[i] * Math.Cos(carrierAngFreq * time);
             }
 
             signal = MathsUtil.FIRFilterCrosstalkShift(signal, notchfir, crosstalk, sampleTime, carrierAngFreq);

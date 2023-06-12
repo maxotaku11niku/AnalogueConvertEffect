@@ -1,5 +1,4 @@
-﻿using PaintDotNet.DirectWrite;
-using System;
+﻿using System;
 using System.Numerics;
 
 /* 
@@ -65,7 +64,7 @@ namespace AnalogueConvertEffect
                                                                  2.0 * 506000 }; //Dr
         private readonly double SubCarrierStartTime = 0.4e-6;
 
-        public override ImageData Decode(double[] signal, int activeWidth, double crosstalk = 0.0, double resonance = 1.0, double scanlineJitter = 0.0, double monitorGamma = 2.5, int channelFlags = 0x7)
+        public override ImageData Decode(double[] signal, int activeWidth, double bwMult = 1.0, double crosstalk = 0.0, double resonance = 1.0, double scanlineJitter = 0.0, double monitorGamma = 2.5, int channelFlags = 0x7)
         {
             int[] activeSignalStarts = new int[videoScanlines]; //Start points of the active parts
             byte R = 0;
@@ -94,10 +93,10 @@ namespace AnalogueConvertEffect
             }
 
             double sampleTime = realActiveTime / (double)activeWidth;
-            double[] mainfir = MathsUtil.MakeFIRFilter(sampleRate, 80, (mainBandwidth - sideBandwidth) / 2.0, mainBandwidth + sideBandwidth, resonance);
-            double[] dbfir = MathsUtil.MakeFIRFilter(sampleRate, 128, (chromaBandwidthUpper - chromaBandwidthLower) / 2.0, chromaBandwidthLower + chromaBandwidthUpper, resonance);
-            double[] drfir = MathsUtil.MakeFIRFilter(sampleRate, 128, (chromaBandwidthUpper - chromaBandwidthLower) / 2.0, chromaBandwidthLower + chromaBandwidthUpper, resonance);
-            double[] colfir = MathsUtil.MakeFIRFilter(sampleRate, 128, (chromaBandwidthUpper - chromaBandwidthLower) / 2.0, chromaBandwidthLower + chromaBandwidthUpper, resonance);
+            double[] mainfir = MathsUtil.MakeFIRFilter(sampleRate, (int)(80.0 / bwMult), ((mainBandwidth - sideBandwidth) / 2.0) * bwMult, (mainBandwidth + sideBandwidth) * bwMult, resonance);
+            double[] dbfir = MathsUtil.MakeFIRFilter(sampleRate, (int)(128.0 / bwMult), ((chromaBandwidthUpper - chromaBandwidthLower) / 2.0) * bwMult, (chromaBandwidthLower + chromaBandwidthUpper) * bwMult, resonance);
+            double[] drfir = MathsUtil.MakeFIRFilter(sampleRate, (int)(128.0 / bwMult), ((chromaBandwidthUpper - chromaBandwidthLower) / 2.0) * bwMult, (chromaBandwidthLower + chromaBandwidthUpper) * bwMult, resonance);
+            double[] colfir = MathsUtil.MakeFIRFilter(sampleRate, (int)(128.0 / bwMult), ((chromaBandwidthUpper - chromaBandwidthLower) / 2.0) * bwMult, (chromaBandwidthLower + chromaBandwidthUpper) * bwMult, resonance);
             for (int i = 1; i < colfir.Length; i++)
             {
                 colfir[i] *= 2.0;
@@ -108,9 +107,9 @@ namespace AnalogueConvertEffect
             {
                 notchfir[i] = -colfir[i];
             }
-            signal = MathsUtil.FIRFilter(signal, mainfir);
             double[] DbSignalPre = MathsUtil.FIRFilterCrosstalkShift(signal, dbfir, crosstalk, sampleTime, SubCarrierAngFrequencies[0]);
             double[] DrSignalPre = MathsUtil.FIRFilterCrosstalkShift(signal, drfir, crosstalk, sampleTime, SubCarrierAngFrequencies[1]);
+            signal = MathsUtil.FIRFilter(signal, mainfir);
             double[] DbSignal = new double[DbSignalPre.Length];
             double[] DrSignal = new double[DrSignalPre.Length];
             int combdelay = 1;

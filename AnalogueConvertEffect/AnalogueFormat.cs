@@ -133,6 +133,6 @@ namespace AnalogueConvertEffect
         }
 
         public abstract double[] Encode(ImageData surface, double monitorGamma);
-        public abstract ImageData Decode(double[] signal, int activeWidth, double crosstalk, double resonance, double scanlineJitter, double monitorGamma, int channelFlags); //Decode must respect the original bandwidths, otherwise we don't get that analogue feeling
+        public abstract ImageData Decode(double[] signal, int activeWidth, double bwMult, double crosstalk, double resonance, double scanlineJitter, double monitorGamma, int channelFlags); //Decode must respect the original bandwidths, otherwise we don't get that analogue feeling
     }
 }

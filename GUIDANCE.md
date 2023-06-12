@@ -18,6 +18,10 @@ Interlacing is drawing only alternate scanlines in any given field, a technique 
 
 In order to generate a faithful analogue signal, the raw RGB values in the image must be gamma transformed. This is where you put your monitor's gamma in order for the effect to gamma transform in the way specified by the standards. If you don't know your monitor's gamma, you can fiddle about with this setting until the image looks right.
 
+## Bandwidth Multiplier
+
+Bandwidth relative to broadcast bandwidths; affects all channels. Lower values result in a more smeared out image, which is useful if you specifically want to emulate the look of VHS video, which used about half the bandwidth of normal broadcasts. VHS-specific artifacts are not simulated yet.
+
 ## Noise Amount
 
 Adds white noise to the signal.
