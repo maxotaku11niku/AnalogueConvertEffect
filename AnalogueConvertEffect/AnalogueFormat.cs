@@ -120,7 +120,7 @@ namespace AnalogueConvertEffect
 
             frameTime = (isInterlaced ? 2.0 : 1.0) / framerate;
             scanlineTime = (isInterlaced ? 2.0 : 1.0) / (double)(scanlines * framerate);
-            realActiveTime = activeTime / (isInterlaced ? 1.0 : 2.0);
+            realActiveTime = activeTime;
             carrierAngFreq = 2 * Math.PI * chromaCarrierFrequency;
         }
 
@@ -129,10 +129,10 @@ namespace AnalogueConvertEffect
             isInterlaced = interlace;
             frameTime = (isInterlaced ? 2.0 : 1.0) / framerate;
             scanlineTime = (isInterlaced ? 2.0 : 1.0) / (double)(scanlines * framerate);
-            realActiveTime = activeTime / (isInterlaced ? 1.0 : 2.0);
+            realActiveTime = activeTime;
         }
 
-        public abstract double[] Encode(ImageData surface, double monitorGamma);
-        public abstract ImageData Decode(double[] signal, int activeWidth, double bwMult, double crosstalk, double resonance, double scanlineJitter, double monitorGamma, int channelFlags); //Decode must respect the original bandwidths, otherwise we don't get that analogue feeling
+        public abstract double[] Encode(ImageData surface);
+        public abstract ImageData Decode(double[] signal, int activeWidth, double bwMult, double crosstalk, double phError, double phNoise, double resonance, double scanlineJitter, int channelFlags); //Decode must respect the original bandwidths, otherwise we don't get that analogue feeling
     }
 }

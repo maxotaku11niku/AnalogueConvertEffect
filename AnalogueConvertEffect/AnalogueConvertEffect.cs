@@ -43,7 +43,7 @@ namespace AnalogueConvertEffect
         public string? DisplayName => "Analogue Convert";
         public string? Author => "Maxim Hoxha";
         public string? Copyright => "2022-2023 Maxim Hoxha";
-        public Version? Version => new Version("1.1");
+        public Version? Version => new Version("1.2");
         public Uri? WebsiteUri => new Uri("https://github.com/maxotaku11niku/AnalogueConvertEffect");
     }
 
@@ -54,7 +54,6 @@ namespace AnalogueConvertEffect
         {
             Format,
             Interlacing,
-            MonitorGamma,
             BandwidthMult,
             Noise,
             PhaseNoise,
@@ -67,7 +66,6 @@ namespace AnalogueConvertEffect
         }
         string chosenFormat;
         bool interlace;
-        double monitorGamma;
         double bandwidthMult;
         double noiseAmount;
         double phaseNoise;
@@ -96,7 +94,6 @@ namespace AnalogueConvertEffect
             List<Property> properties = new List<Property>();
             properties.Add(new StaticListChoiceProperty(PropertyNames.Format, new string[] {"PAL", "NTSC", "SECAM"}, 0));
             properties.Add(new BooleanProperty(PropertyNames.Interlacing, true));
-            properties.Add(new DoubleProperty(PropertyNames.MonitorGamma, 2.5, 1.0, 4.0));
             properties.Add(new DoubleProperty(PropertyNames.BandwidthMult, 1.0, 0.5, 1.0));
             properties.Add(new DoubleProperty(PropertyNames.Noise, 0.0, 0.0, 1.0));
             properties.Add(new DoubleProperty(PropertyNames.PhaseNoise, 0.0, 0.0, 180.0));
@@ -115,7 +112,6 @@ namespace AnalogueConvertEffect
             ControlInfo controlUI = PropertyControlInfo.CreateDefaultConfigUI(props);
             controlUI.SetPropertyControlValue(PropertyNames.Format, ControlInfoPropertyNames.DisplayName, "Format");
             controlUI.SetPropertyControlValue(PropertyNames.Interlacing, ControlInfoPropertyNames.DisplayName, "Do Interlacing?");
-            controlUI.SetPropertyControlValue(PropertyNames.MonitorGamma, ControlInfoPropertyNames.DisplayName, "Your Monitor's Gamma");
             controlUI.SetPropertyControlValue(PropertyNames.BandwidthMult, ControlInfoPropertyNames.DisplayName, "Bandwidth Multiplier");
             controlUI.SetPropertyControlValue(PropertyNames.Noise, ControlInfoPropertyNames.DisplayName, "Noise Amount");
             controlUI.SetPropertyControlValue(PropertyNames.Noise, ControlInfoPropertyNames.DecimalPlaces, 3);
@@ -135,7 +131,6 @@ namespace AnalogueConvertEffect
         {
             chosenFormat = (string)newToken.GetProperty<StaticListChoiceProperty>(PropertyNames.Format).Value;
             interlace = newToken.GetProperty<BooleanProperty>(PropertyNames.Interlacing).Value;
-            monitorGamma = newToken.GetProperty<DoubleProperty>(PropertyNames.MonitorGamma).Value;
             bandwidthMult = newToken.GetProperty<DoubleProperty>(PropertyNames.BandwidthMult).Value;
             noiseAmount = newToken.GetProperty<DoubleProperty>(PropertyNames.Noise).Value;
             phaseNoise = newToken.GetProperty<DoubleProperty>(PropertyNames.PhaseNoise).Value;
@@ -179,18 +174,6 @@ namespace AnalogueConvertEffect
             for(int i = 0; i < signal.Length; i++)
             {
                 signal[i] += (2.0 * rng.NextDouble() - 1.0) * noiseAmount;
-            }
-            double[] shiftSig = MathsUtil.ShiftArrayInterp(signal, (phaseError * sampFreq) / (360.0 * scFreq));
-            double[] shiftPart;
-            for (int i = 0; i < 69; i++) rng.NextDouble(); //advance the rng for no reason
-            for (int i = 0; i < boundaryPoints.Length - 1; i++)
-            {
-                shiftPart = shiftSig[boundaryPoints[i]..boundaryPoints[i+1]];
-                shiftPart = MathsUtil.ShiftArrayInterp(shiftPart, ((2.0 * rng.NextDouble() - 1.0) * phaseNoise * sampFreq) / (360.0 * scFreq));
-                for(int j = 0; j < shiftPart.Length; j++)
-                {
-                    signal[j + boundaryPoints[i]] = shiftPart[j];
-                }
             }
             if (distortionRamp != 0.0)
             {
@@ -259,9 +242,9 @@ namespace AnalogueConvertEffect
             {
                 inIDat.Data[i] = wrkblk[i];
             }
-            double[] signal = format.Encode(inIDat, monitorGamma);
+            double[] signal = format.Encode(inIDat);
             DistortSignal(signal, signal.Length * format.Framerate, format.SubcarrierFrequency, format.BoundaryPoints);
-            ImageData outIDat = format.Decode(signal, wrkWidth, bandwidthMult, crosstalk, resonance, jitter, monitorGamma, (doY ? 0x1 : 0x0) | (doU ? 0x2 : 0x0) | (doV ? 0x4 : 0x0));
+            ImageData outIDat = format.Decode(signal, wrkWidth, bandwidthMult, crosstalk, phaseError, phaseNoise, resonance, jitter, (doY ? 0x1 : 0x0) | (doU ? 0x2 : 0x0) | (doV ? 0x4 : 0x0));
             Surface destSurf = new Surface(surrRect.Size);
             for (int i = 0; i < inIDat.Data.Length; i++)
             {
