@@ -43,7 +43,7 @@ namespace AnalogueConvertEffect
         public string? DisplayName => "Analogue Convert";
         public string? Author => "Maxim Hoxha";
         public string? Copyright => "2022-2023 Maxim Hoxha";
-        public Version? Version => new Version("1.2");
+        public Version? Version => new Version("1.2.1");
         public Uri? WebsiteUri => new Uri("https://github.com/maxotaku11niku/AnalogueConvertEffect");
     }
 
@@ -85,7 +85,7 @@ namespace AnalogueConvertEffect
             iconImage = (Bitmap)resm.GetObject("icon");
         }
 
-        public AnalogueConvertEffect() : base("Analogue Convert", iconImage, SubmenuNames.Stylize, new EffectOptions() { Flags = EffectFlags.Configurable | EffectFlags.ForceAliasedSelectionQuality, RenderingSchedule = EffectRenderingSchedule.None })
+        public AnalogueConvertEffect() : base("Analogue Convert", iconImage, SubmenuNames.Stylize, new EffectOptions() { Flags = EffectFlags.Configurable, RenderingSchedule = EffectRenderingSchedule.None })
         {
         }
 
@@ -254,13 +254,14 @@ namespace AnalogueConvertEffect
             if (length <= 0) return;
             for (int i = startIndex; i < startIndex + length; i++)
             {
-                Render(destSurf, DstArgs.Surface, rois[i], surrRect.Location);
+                DrawROIs(destSurf, DstArgs.Surface, rois[i], surrRect.Location);
             }
         }
 
-        private void Render(Surface src, Surface dst, Rectangle dstrectangle, Point rootPoint)
+        private void DrawROIs(Surface src, Surface dst, Rectangle dstrectangle, Point rootPoint)
         {
-            dst.CopySurface(src, dstrectangle);
+            Rectangle properSrcRect = new Rectangle(dstrectangle.X - rootPoint.X, dstrectangle.Y - rootPoint.Y, dstrectangle.Width, dstrectangle.Height);
+            dst.CopySurface(src, dstrectangle.Location, properSrcRect);
         }
     }
 }
